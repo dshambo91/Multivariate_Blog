@@ -96,7 +96,7 @@ x <- car_data[,-24] %>% data.matrix()
 #now we will create a sequence of lambda values for use in our analysis
 lambdas <- 10^seq(3, -2, by = -.1)
 
-#here we are creating models using all of our values for lambda
+#here we are creating models using all of our values of lambda
 fit <- glmnet(x, y, alpha = 0, lambda = lambdas)
 summary(fit)
 
