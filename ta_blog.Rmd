@@ -1,0 +1,106 @@
+---
+title: "TA Blog"
+author: "Derek Shambo"
+date: "December 1, 2018"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#this code will check to see if the package pacman needs to be installed, and if it does, will install it and load it. pacman comes with a function (p_load) that does something similar, so all other packages will be loaded with p_load
+if (!require("pacman")) install.packages("pacman") 
+p_load(dplyr,arules,arulesViz)
+```
+
+This post will be an analysis of TA scores and what is associated with good and poor performing TAs. The analysis conducted will be the creation of association rules. These rules will help us to understand how the variables given to us interact with each other.
+
+First we will do our data input, exploration, and prep
+```{r}
+ta_data <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/tae/tae.data",
+         col.names = c("English_Speaker",
+                       "Course_Intstructor",
+                       "Course",
+                       "Summer_or_Reg",
+                       "Class_Size",
+                       "Class_Attr"))
+
+#variable explanation:
+#English_speaker: whether or not the ta was an english speaker, english =1, non_english = 2
+#Course_Instructor: who taught the course
+#Course: type of course
+#Summer_or_Reg: summer class or normal semester class. 1=summer, 2 = reg
+#Class_Size: number of student in course
+#Class_Attr: score given to TA, either low, medium or high
+
+#lets check to see if there are any NAs present
+sum(is.na(ta_data))
+#no NAs!
+
+#lets look at the class size variable
+summary(ta_data$Class_Size)
+#the mean and median are both at about 27 students, with the max being 66 and the min being 3
+
+#to perform association rule mining, the variables used must be either factor or logical. I think it makes sense to divide class size into a small, medium, and large group. we will do this using the cut function
+ta_data$size <- cut(ta_data$Class_Size, 3)
+
+#convert all variables to factors
+ta_data.new <- ta_data[,c(1:4,6:7)]
+
+for(i in 1:ncol(ta_data.new)){
+     ta_data.new[,i] <- as.factor(ta_data.new[,i])
+}
+
+#a look at the first 5 rows
+head(ta_data.new)
+```
+
+Lets dive straight into association rule mining!
+
+```{r}
+#lets first see what rules are created using the default settings
+basket_rules.all <- apriori(ta_data.new)#looks like we found 41 rules under the default settings. 
+
+#take a look at the top 5 rules when sorted by lift
+inspect(sort(basket_rules.all, by="lift", decreasing = TRUE)[1:5])
+#4 of the top 5 rules appear to be in relation to course 3
+#instructor 23 only teaches course 3
+#the majority of summer classes taken were class 3
+
+#lets try to make some rules that will give us an incite into what might be associated with good scores for TAs
+rules_high <- apriori(ta_data.new,
+                 parameter = list(minlen=1, supp=0.02, conf=0.5),
+                 appearance = list(rhs="Class_Attr=3",
+                                   default="lhs"))
+
+inspect(sort(rules_high, by="support", decreasing = TRUE)[1:10])
+#course 3 appears to be a good indicator that the TA received a high score. TAs speaking english also tend to score high. Summer courses also tend to have high scoring TAs.
+
+#It would also be interesting to take a look at what attributes are associated with poor performing TAs
+rules_low <- apriori(ta_data.new,
+                 parameter = list(minlen=1, supp=0.02, conf=0.5),
+                 appearance = list(rhs="Class_Attr=1",
+                                   default="lhs"))
+
+inspect(sort(rules_low, by="support", decreasing = TRUE)[1:10])
+#this yields some interesting results. many of the association rules found show that non-english speaking TAs may get lower scores. 
+#course 2 also seems to be a common culprit, along with course 1
+```
+
+Now lets do some visualization of the rules we created
+```{r}
+#lets take a look at the rules generated for high scoring TAs
+plot(rules_high)
+#lets do the same for rules generated for low scoring TAs
+plot(rules_low)
+#these graphs show similar scenarios where there is a trade off from confidence to support.
+
+#this plot shows arrors that go through each step of the rule to the RHS. the darker the arrow, the 
+plot(rules_high, method = "paracoord", control = list(reorder = TRUE))
+
+plot(rules_low, method = "paracoord", control = list(reorder = TRUE))
+```
+
+This concludes our analysis of the TA dataset. We discoved that one of the key associations with high scores were teaching summer courses and teaching course 3, and some of the associations with poor scores were teaching courses 1 or 2.
+
+With more data, this same approach can be utilized to gain even more incite into what is typically associated with high performing TAs
+

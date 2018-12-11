@@ -1,0 +1,131 @@
+---
+title: "Blog Post 1 - Wine Blog"
+author: "Derek Shambo"
+date: "November 15, 2018"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#this code will check to see if the package pacman needs to be installed, and if it does, will install it and load it. pacman comes with a function (p_load) that does something similar, so all other packages will be loaded with p_load
+if (!require("pacman")) install.packages("pacman") 
+p_load(tidyverse,dplyr,factoextra)
+```
+
+The analysis conducted will utilize clustering. The goal here will be to see if there is some natural segmentation in the wines. This could be utilized to help someone understand find other wines that they enjoy, or wines that they should avoid. It may also be useful in helping wine makers understand what chemical properties create certain flavor profiles.
+
+Data input and exploration:
+The data being analyzed is different properties of wine. It is the results of chemical analysis conducted on the wines. All of the wines come from the same region in Italy, and from 3 different cultivars in that region.
+
+```{r}
+#data load in. Col names taken from uci website
+wine_data <- read_csv("https://archive.ics.uci.edu/ml/machine-learning-databases/wine/wine.data",
+                      col_names = c("Col 1",
+                                    "Alcohol",
+                                    "Malic acid",
+                                    "Ash",
+                                    "Alcalinity of ash",
+                                    "Magnesium",
+                                    "Total phenols",
+                                    "Flavanoids",
+                                    "Nonflavanoid phenols",
+                                    "Proanthocyanins",
+                                    "Color intensity",
+                                    "Hue",
+                                    "OD280/OD315 of diluted wines",
+                                    "Proline"))
+
+#col 1 is a class item, but there isn't documentation on what those classes actually represent, so this column will be removed
+wine_data$`Col 1` <- NULL
+
+#check for NAs
+sum(is.na(wine_data)) #There are no NAs present in the data!
+
+#lets take a look at the data
+summary(wine_data)
+```
+
+Luckily our data didn't require a lot of preparation, and we are ready to dive into the analysis. As discussed before, we will be using cluster analysis to try to get a better understanding of what is in our wine data. 
+
+Cluster Creation:
+The first thing we need to do is create our clusters. For this we will scale our data. This insures that all variables are utilized equally in the cluster analysis. We will then create our clusters using hierarchical clustering. Using a dendogram, we can visualize our clusters and see how our data seperates.
+
+```{r}
+#The first thing we want to do is scale the data
+wine_scale <- as.matrix(scale(wine_data))
+
+d <- dist(wine_scale, method = "euclidean") # distance matrix
+fit <- hclust(d, method="ward.D2")
+plot(fit) # display dendogram
+#as we can see, there are 3 clusters that are evident
+abline(h=15)
+
+rect.hclust(fit, k=3, border="red")
+#the boxes displayed show our three clusters
+```
+
+Analysis of clusters:
+We will now "cut" our dendogram at the specified point to get our 3 clusters. These clusters will be bound with our data, allowing us to analysis what those clusters actually say. We will then look at the mean value for each of our variables for each cluster. This will tell us what is unique about each cluster.
+```{r}
+#first, we will cut our dendogram at 3 clusters
+cut <- cutree(fit, k = 3)
+
+#next, we will bind our data with that cut to know which wines belong wo which clusters
+wine_clust <- cbind(wine_data, cut)
+
+#this will allow us to visualize the clusters
+fviz_cluster(list(data = wine_clust[-14], cluster = cut))
+
+(sum_clusts <- wine_clust %>%
+     group_by(cut) %>%
+     summarise_all(funs(mean)))
+#we can now view sum_clusts to see what each cluster looks like, and how they compare to each other
+
+```
+
+Wines in Cluster 1:
+High alcohol content
+Average amount of Malic Acid
+High Ash
+Low Alcalinity of ash*
+High Magnesium
+High total phenols
+High Flavanoids*
+Low Nonflavanoi phenols
+High Proanthocyanins
+Average color intensity
+High hue
+High OD280/OD315 of diluted wines
+High Proline*
+
+Wines in Cluster 2:
+Low alcohol content
+Average Malic acid
+Low ash*
+Average alcalinity of ash
+Low Magnesium
+Average Flavanoids
+Average Nonflavanoid phenols
+Average Proanthocyanins
+Low color intensity*
+Average hue
+Average OD280/OD315 of diluted wines
+Low Proline
+
+Wines in Cluster 3:
+Average alcohol content
+High Malic acid*
+High ash
+High alcalinity of ash
+Medium Magnesium
+Low Flavanoids*
+High Nonflavanoid phenols
+Low Proanthocyanins*
+High color intensity
+Low hue
+Low OD280/OD315 of diluted wines*
+medium-low Proline
+
+*significantly lower or higher than the other two clusters
+
+Looking at our dendogram and cluster visualization, there was a pretty clear split for these three clusters. 

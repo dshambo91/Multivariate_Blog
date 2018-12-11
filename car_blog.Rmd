@@ -1,0 +1,129 @@
+---
+title: "Car_Blog"
+author: "Derek Shambo"
+date: "December 10, 2018"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#this code will check to see if the package pacman needs to be installed, and if it does, will install it and load it. pacman comes with a function (p_load) that does something similar, so all other packages will be loaded with p_load
+if (!require("pacman")) install.packages("pacman") 
+p_load(dplyer, tidyverse, ISLR, glmnet)
+```
+
+Here we will be taking a look at vehicle data, specifically 1985 import car and truck specifications. This data set has a lot of information, and plenty of variables to play around with. We will try to predict what the price of a vehicle would be using ridge regression. 
+
+
+```{r}
+car_data <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/autos/imports-85.data",
+                     col.names = c("symboling",
+                                   "normalized-losses",
+                                   "make",
+                                   "fuel-type",
+                                   "aspiration",
+                                   "num-of-doors",
+                                   "body-style",
+                                   "drive-wheels",
+                                   "engine-location",
+                                   "wheel-base",
+                                   "length",
+                                   "width",
+                                   "height",
+                                   "curb-weight",
+                                   "engine-type",
+                                   "num-of-cyliners",
+                                   "engine-size",
+                                   "fuel-system",
+                                   "bore",
+                                   "stroke",
+                                   "compression-ratio",
+                                   "horsepower",
+                                   "peak-rpm",
+                                   "city-mpg",
+                                   "highway-mpg",
+                                   "price"))
+```
+
+This data has a lot of variables, and will be a prime candidate for some ridge lasso regression. This will help us in dimension regression and really determine the most important varaibles when determining the price of a vehicle. Ridge regression differ from OLS regression by penalizing the estimates. Features that are less influential will be penalized, and more influential features will be penalized less. This helps to be sure that the most important features play a bigger role in our predictions and that our model isn't be overfitted to our dataset. 
+
+First, we will do a little bit of data exploration and preparation
+
+```{r pressure}
+#lets see some summary statistics on our data set
+summary(car_data)
+
+#one thing that jumps out is that several variables that should be numeric are factors with "?" being one of the values listed. These need to be corrected, and the variables need to be changed to numeric.
+car_data$price[car_data$price == "?"] <- NA
+car_data$price <- as.numeric(as.character(car_data$price))
+
+car_data$bore[car_data$bore == "?"] <- NA
+car_data$bore <- as.numeric(as.character(car_data$bore))
+
+car_data$stroke[car_data$stroke == "?"] <- NA
+car_data$stroke <- as.numeric(as.character(car_data$stroke))
+
+car_data$horsepower[car_data$horsepower == "?"] <- NA
+car_data$horsepower <- as.numeric(as.character(car_data$horsepower))
+
+car_data$peak.rpm[car_data$peak.rpm == "?"] <- NA
+car_data$peak.rpm <- as.numeric(as.character(car_data$peak.rpm))
+
+car_data$normalized.losses[car_data$normalized.losses == "?"] <- NA
+car_data$normalized.losses <- as.numeric(as.character(car_data$normalized.losses))
+
+car_data$num.of.doors[car_data$num.of.doors == "?"] <- NA
+
+#now that all of the ?s have been corrected, lets check to see how many NAs there actually are
+sum(is.na(car_data)) #there are a total of 58 NAs.
+sum(is.na(car_data$normalized.losses)) # however, 40 of them appear in the normalized losses column. Because so many of the values for this variable are missing, we will remove it.
+car_data$normalized.losses <- NULL
+
+#for our analysis here, we will also eliminate the make variable. it is well know that certain makes of cars cost significantly more others. we will look to see what our other variables can tell us regarding price
+car_data$make <- NULL
+
+sum(complete.cases(car_data))#here we see that 12 of the vehicles left are missing data. For the purposes of this analysis, we are going to only utilize complete cases. In the future, we could look into using imputation to correct the NAs.
+
+car_data <- car_data[complete.cases(car_data),]
+```
+
+Now we will start our ridge regression analysis
+
+```{r}
+#first, we will seperate our data into our y and x values
+y <- car_data$price
+x <- car_data[,-24] %>% data.matrix()
+#now we will create a sequence of lambda values for use in our analysis
+lambdas <- 10^seq(3, -2, by = -.1)
+
+#here we are creating models using all of our values for lambda
+fit <- glmnet(x, y, alpha = 0, lambda = lambdas)
+summary(fit)
+
+#ridge regression involves hypertuning the lambda variable, and the cv.glmnet will help us determine the optimal value for it. it does this utilizing cross validation, hence the cv
+cv_fit <- cv.glmnet(x, y, alpha = 0, lambda = lambdas)
+
+#lets plot our cv_fit
+plot(cv_fit)
+
+#the lowest point on our curve represents the optimal value. we will grab that value now
+opt_lambda <- cv_fit$lambda.min
+opt_lambda
+
+#using the predict function, we will select the model created using the optimal labda value
+y_predicted <- predict(fit, s = opt_lambda, newx = x)
+
+# Sum of Squares Total and Error
+sst <- sum((y - mean(y))^2)
+sse <- sum((y_predicted - y)^2)
+
+# R squared
+rsq <- 1 - sse / sst
+rsq
+#our ridge regression identifies 88.6% of the variance in our training data
+
+#finally, lets take a look at the coefficients used in our model
+coef(fit)[,fit$lambda==opt_lambda]
+```
+
+Some of the key indicators of how much a vehicle will cost are the fuel type, engine location, number of cylinders, the bore, and the stroke. Our model does a pretty good job of explaining the variation we see in price, even without looking at the make of the vehicle. 
